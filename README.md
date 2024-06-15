@@ -12,26 +12,26 @@ For the replication of the publication's complete analyses, the Rmarkdown and SA
 interchangeably. The progression is described in the Rmarkdown file:
 
 Workflow for WGS SNP analyses [R code] [SAS Code]
-  # 1 Subset Allelic Data for Simple Analyses (only for 100 loci sample)
-  # 2 Prep Allelic Data for Mixed Model Analyses
-  # 3 Create Template Files
-  WGS SAS Code
-  # 4 Merge Results
-  # 5 AIC Model Selection
-  # 6 Identify P-Value
-  # 7 No Within-Line Variance
-  # 8 Write Results
-  # 9 Group SNPs
-  # 10 Select Maxima from Groups
+  [R] 1 Subset Allelic Data for Simple Analyses (only for 100 loci sample)
+  [R] 2 Prep Allelic Data for Mixed Model Analyses
+  [R] 3 Create Template Files
+  [SAS] WGS SAS Code
+  [R] 4 Merge Results
+  [R] 5 AIC Model Selection
+  [R] 6 Identify P-Value
+  [R] 7 No Within-Line Variance
+  [R] 8 Write Results
+  [R] 9 Group SNPs
+  [R] 10 Select Maxima from Groups
 
 Haplotype
-  # H11 Recode Alleles
-  # 3 Create Template Files (Not necessary if files still remain from SNP analyses)
-  Haplotype SAS Code
-  # H12 Functions for Combining Haplotype Results
-  # H13 Read Haplotype Results
-  # H14 Run Haplotype Functions
-  # H15 Combine into One File
+  [R] H11 Recode Alleles
+  [R] 3 Create Template Files (Not necessary if files still remain from SNP analyses)
+  [SAS] Haplotype SAS Code
+  [R] H12 Functions for Combining Haplotype Results
+  [R] H13 Read Haplotype Results
+  [R] H14 Run Haplotype Functions
+  [R] H15 Combine into One File
  
 Running the code in its entirety will address only a subset of loci. However, the first R chunk can be 
 skipped and "File_S2_sample.csv" replaced with "File S2.csv" in the second chunk to analyze the whole data
