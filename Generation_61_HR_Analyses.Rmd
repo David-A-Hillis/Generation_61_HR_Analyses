@@ -1,0 +1,672 @@
+---
+title: "Generation 61 High-Runner Mouse Differentiation Analyses"
+author: "David Hillis"
+date: "2024-06-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Below is the R and SAS code for differentiation analysis and permutations. These are written such that one should be able to copy and paste the syntax into the proper program and run it with minor adjustments. The most common adjustment being any directories. R syntax is written for RStudio and thus those pasting into the base R should only copy the text between ```{r, [chunk_name], warning=FALSE} and ```, for each chunk.
+The analyses require occasional movement between SAS and R code. In this file, the R code is listed before the SAS code. Running all of these analyses can take a great deal of time on a personal computer (totaling in weeks of runtime, mostly due to SNP analyses and permutations).
+The WGS SNP analyses has a chunk at the start for extracting 100 loci for analyses. 
+
+Workflow for WGS SNP analyses [R code] [SAS Code]
+  # 1 Subset Allelic Data for Simple Analyses (only for 100 loci sample)
+  # 2 Prep Allelic Data for Mixed Model Analyses
+  # 3 Create Template Files
+  WGS SAS Code
+  # 4 Merge Results
+  # 5 AIC Model Selection
+  # 6 Identify P-Value
+  # 7 No Within-Line Variance
+  # 8 Write Results
+  # 9 Group SNPs
+  # 10 Select Maxima from Groups
+
+Haplotype
+  # H11 Recode Alleles
+  # 3 Create Template Files (Not necessary if files still remain from SNP analyses)
+  Haplotype SAS Code
+  # H12 Functions for Combining Haplotype Results
+  # H13 Read Haplotype Results
+  # H14 Run Haplotype Functions
+  # H15 Combine into One File
+
+
+# 1 Subset Allelic Data for Simple Analyses
+Creates a new csv file called "File_S2_sample.csv" which contains only the
+first 100 rows of "File S2.csv".
+```{r, subset, warning=FALSE}
+setwd("C:\\Users\\david\\Desktop\\Garland\\Manuscript1\\Sample_Analyses") # Directory
+data <- read.csv("File S2.csv", stringsAsFactors = FALSE, nrows = 100) # Reads 100 rows of "File S2.csv"
+write.csv(data, "File_S2_sample.csv", row.names = FALSE) # Writes out "File_S2_sample.csv"
+```
+
+# 2 Prep Allelic Data for Mixed Model Analyses
+This step uses the sample data file produced by the previous chunk of code but
+could easily use the full data set by changing the file name.
+### NOTE: The "ready" file is referred to in later analyses and organization of results after SAS code is run
+```{r, WGS_prep, warning=FALSE}
+setwd("C:\\Users\\david\\Desktop\\Garland\\Manuscript1\\Sample_Analyses") # Directory
+data <- read.csv("File_S2_sample.csv", stringsAsFactors = FALSE) # Reads raw data file
+new_marker <- as.data.frame(c(1:nrow(data))) # Makes a new marker column numbered 1 through the total number of rows in the data file
+data_out <- cbind(data[,c(1,2)], new_marker, data[,c(4:161)])
+colnames(data_out)[1] <- "chromosome"
+colnames(data_out)[3] <- "marker"
+write.csv(data_out, "File_S2_ready.csv", row.names = FALSE, na = ".") # Writes out file swapping "NA" for "." for SAS recognition
+```
+
+# 3 Create Template Files
+The template files will be loaded into SAS to base output files.
+These only need to be created once regardless of how many times the SAS code is run.
+These tables are populated with arbitrary data, similar to what will be produced in SAS
+```{r, templates, warning=FALSE}
+setwd("C:\\Users\\david\\Desktop\\Garland\\Manuscript1\\Sample_Analyses") # Directory
+AIC <- as.data.frame(matrix(c("-2 Res Log Likelihood", "AIC (Smaller is Better)", 55.7, 61.7), 2, 2))
+colnames(AIC) <- c("Descr", "Value")
+write.csv(AIC, "AIC.csv", row.names = FALSE, quote = FALSE)
+Tests <- as.data.frame(matrix(c("pop", "pop", 1, 1, 5.54, 5.54, 65.96, 65.96, 0.0003, 0.0003), 2, 5))
+colnames(Tests) <- c("Effect", "NumDF", "DenDF", "FValue", "ProbF")
+write.csv(Tests, "Tests.csv", row.names = FALSE, quote = FALSE)
+```
+
+### NOTE: "WGS SAS Code" must be run before proceeding to the next step
+
+# 4 Merge Results
+The following code reads in and merges the AICc and Test scores
+```{r, merge_results, warning=FALSE}
+dir <- "C:\\Users\\david\\Desktop\\Garland\\Manuscript1\\Sample_Analyses" # Set dir for the next few chunks of code
+setwd(dir)
+
+pfull <- read.csv("Results_full_tests.csv", stringsAsFactors = FALSE)
+pnogroup <- read.csv("Results_nogroup_tests.csv", stringsAsFactors = FALSE)
+pnogroupLine <- read.csv("Results_nogroupLine_tests.csv", stringsAsFactors = FALSE)
+pnogroupMouse <- read.csv("Results_nogroupMouse_tests.csv", stringsAsFactors = FALSE)
+
+pval <- as.data.frame(cbind(pfull[,5], pnogroup[,5], pnogroupLine[,5], pnogroupMouse[,5])) # Merges all p-values together
+colnames(pval) <- c("P_full", "P_nogroup", "P_nogroupLine", "P_nogroupMouse")
+fstat <- as.data.frame(cbind(pfull[,4], pnogroup[,4], pnogroupLine[,4], pnogroupMouse[,4])) # Merges all f-statistics together
+colnames(fstat) <- c("F_full", "F_nogroup", "F_nogroupLine", "F_nogroupMouse")
+
+logfull <- read.csv("Results_full_log.csv", stringsAsFactors = FALSE)
+lognogroup <- read.csv("Results_nogroup_log.csv", stringsAsFactors = FALSE)
+lognogroupLine <- read.csv("Results_nogroupLine_log.csv", stringsAsFactors = FALSE)
+lognogroupMouse <- read.csv("Results_nogroupMouse_log.csv", stringsAsFactors = FALSE)
+aic <- as.data.frame(cbind(logfull[,3], lognogroup[,3], lognogroupLine[,3], lognogroupMouse[,3])) # Merges all AICc scores together
+colnames(aic) <- c("AICC_f", "AICC_ng", "AICC_ngL", "AICC_ngM")
+```
+
+# 5 AIC Model Selection
+Identifies the model with the lowest AICc and reports number of ties for the lowest.
+Ties are resolved by prioritizing the model with fewer parameters (Simple, SepVarLines, SepVarInd, Full)
+```{r, AICselect}
+time1 <- Sys.time() # For tracking time to completion for this chunk
+
+loci <- c(1:nrow(aic))
+AIC_min <- c()
+AIC_name <- c()
+AIC_ties <- c()
+
+for (i in loci) {
+  m <- min(aic[i,])
+  AIC_min <- c(AIC_min, m) # Populates list with minimum AICc values for each loci, only used for error check later in this chunk
+  if (sum(aic[i,]==m) > 1) { AIC_ties <- c(AIC_ties, i)  } # Populates list with loci which contain ties in AICc, not incorporated into final table
+
+  if (aic[i,2]==m & !is.na(aic[i,2])) {AIC_name <- c(AIC_name, "nogroup") # Populates list with model whose AICc matches the minimum
+  } else if (aic[i,4]==m & !is.na(aic[i,4])) {AIC_name <- c(AIC_name, "nogroupMouse") # Populates list with model whose AICc matches the minimum
+  } else if (aic[i,3]==m & !is.na(aic[i,3])) {AIC_name <- c(AIC_name, "nogroupLine") # Populates list with model whose AICc matches the minimum
+  } else if (aic[i,1]==m & !is.na(aic[i,1])) {AIC_name <- c(AIC_name, "full") # Populates list with model whose AICc matches the minimum
+  } else {AIC_name <- c(AIC_name, NA)}
+}
+
+AIC_name <- as.data.frame(AIC_name)
+AIC_min <- as.data.frame(AIC_min)
+nrow(AIC_min)==nrow(aic) #Returns TRUE if no rows were omitted from "AIC_min"
+nrow(AIC_min)==nrow(AIC_name) #Returns TRUE if no rows were omitted from "AIC_name"
+print(paste("Number of AICc ties = ", length(AIC_ties), sep = "" )) #Returns number of AICc ties
+
+time2 <- Sys.time()
+time2-time1
+```
+
+# 6 Identify P-Value
+This will use the lowest AICC to select the best P-Value create its own data frame for that list of values.
+This will also combine the data for output so that "no variance" chunks can implement changes before writing the csv.
+```{r, bestP, warning=FALSE}
+time1 <- Sys.time() # For tracking time to completion for this chunk
+
+bestp <- c()
+bestf <- c()
+
+for (i in loci) {
+  if (AIC_name[i,1]=="nogroup") {
+    bestp <- c(bestp, pval[i,2]) # Populates list with p-value associated with model which had lowest AICc
+    bestf <- c(bestf, fstat[i,2]) # Populates list with f-statistic associated with model which had lowest AICc
+  } 
+  else if (AIC_name[i,1]=="nogroupMouse") {
+    bestp <- c(bestp, pval[i,4])
+    bestf <- c(bestf, fstat[i,4])
+  } 
+  else if (AIC_name[i,1]=="nogroupLine") {
+    bestp <- c(bestp, pval[i,3])
+    bestf <- c(bestf, fstat[i,3])
+  } 
+  else if (AIC_name[i,1]=="full") {
+    bestp <- c(bestp, pval[i,1])
+    bestf <- c(bestf, fstat[i,1])
+  } 
+  else {
+    bestp <- c(bestp, NA)
+    bestf <- c(bestf, NA)
+  }
+}
+bestp <- as.data.frame(bestp)
+bestf <- as.data.frame(bestf)
+count <- as.data.frame(c(1:nrow(aic)))
+colnames(count) <- c("Loci")
+summ <- cbind(count, aicc, AIC_name, bestf, bestp, pval, fstat) # Combines "best" values and model with all p-values, f-statistics, and AICc scores
+colnames(summ)[6] <- "Best_model"
+
+# For removing factors
+setwd(dir)
+write.csv(summ, "summ_int.csv", row.names = FALSE)
+summ <- read.csv("summ_int.csv", stringsAsFactors = FALSE)
+
+time2 <- Sys.time()
+time2-time1
+```
+
+# 7 No Within-Line Variance
+This swaps the "best model" for loci where every line is fixed for one allele or another with "no variance"
+This is necessary because the mixed model ANOVA cannot properly analyze these loci.
+```{r, lineVar, warning=FALSE}
+time1 <- Sys.time() # For tracking time to completion for this chunk
+setwd(dir)
+allele_data <- read.csv("File_S2_ready.csv", stringsAsFactors = FALSE, na.strings = ".")
+lvar <- allele_data[,c(1:3)] # Makes new table with SNP location
+lvar$AF_C1 <- rowMeans(allele_data[,c(4:23)], na.rm = TRUE) # Adds line 1 Allele frequencies
+lvar$AF_C2 <- rowMeans(allele_data[,c(24:43)], na.rm = TRUE) # Adds line 2 Allele frequencies
+lvar$AF_C4 <- rowMeans(allele_data[,c(44:63)], na.rm = TRUE) # Adds line 4 Allele frequencies
+lvar$AF_C5 <- rowMeans(allele_data[,c(64:83)], na.rm = TRUE) # Adds line 5 Allele frequencies
+lvar$AF_HR3 <- rowMeans(allele_data[,c(84:101)], na.rm = TRUE) # Adds line 3 Allele frequencies
+lvar$AF_HR6 <- rowMeans(allele_data[,c(102:121)], na.rm = TRUE) # Adds line 6 Allele frequencies
+lvar$AF_HR7 <- rowMeans(allele_data[,c(122:141)], na.rm = TRUE) # Adds line 7 Allele frequencies
+lvar$AF_HR8 <- rowMeans(allele_data[,c(142:161)], na.rm = TRUE) # Adds line 8 Allele frequencies
+
+# The allele frequencies file does not have to be saved out for later analyses but may be worth keeping for reference
+write.csv(lvar, "File_S2_allele_frequencies_per_line.csv", row.names = FALSE)
+lvar$fixed <- 0
+for (i in 1:nrow(lvar)) {lvar[i,12] <- sum(lvar[i,c(4:11)]==0 | lvar[i,c(4:11)]==1)} # Adds to 12th column (fixed) total number of fixed lines
+print(paste("NAs in fixed loci counts = ", sum(is.na(lvar[,12])), ". This should be 0.", sep = "")) # If not 0, this indicates an error
+novar <- which(lvar[,12]==8) # Any loci with 8 fixed lines has no within-line variance
+
+for (i in novar) {
+  summ[i,6] <- "No Variance" # Best_model replaced
+  summ[i,7] <- NA # bestf replaced
+  summ[i,8] <- NA # bestp replaced
+}
+
+time2 <- Sys.time()
+time2-time1
+```
+
+# 8 Write Results
+This writes two files.
+The "summary" file includes AICc, F-statistic, and P-value for all loci.
+The "simplified" file only includes the best model (lowest AICc), and corresponding F-statistic and P-value.
+```{r, write, warning=FALSE}
+setwd(dir)
+summ <- cbind(allele_data[,c(1,2)], summ)
+write.csv(summ, "Complete_Results_Summary.csv", row.names = FALSE)
+short <- summ[,c(1:3, 8:10)]
+write.csv(short, "Complete_Results_Simplified.csv", row.names = FALSE)
+```
+
+# 9 Group SNPs
+The purpose of the code below is to take the clusters of suggestive loci
+(default p <0.001).
+NOTE: This will not produce results with the sample 1000 loci (no p <0.001),
+however, changing cutoff to <0.1 will produce one local max.
+```{r, LMax, warning=FALSE}
+dir <- "C:\\Users\\david\\Desktop\\Garland\\Manuscript1\\Sample_Analyses"
+setwd(dir)
+
+short <- read.csv("Complete_Results_Simplified.csv", stringsAsFactors = FALSE)
+clust <- short[which(short[,6]<0.001), c(3,1,2,6)] #Removes "Best_model" and "bestf" columns and any loci with p >= 0.001, change here for sample loci
+clust$logP <- -log10(clust[,4]) # Adds -logP column
+c.count <- c() # List that will be populated with a group number for those suggested loci within 1 million bp of each other
+group <- 0 # Tracks the group number
+
+for (i in unique(clust[,2])) {
+  current <- clust[clust[,2]==i,] # Breaks clust down to individual chromosome
+  loci <- c(1:nrow(current))
+  size <- 1 # Denotes the determined size of the current group
+  for (k in loci) {
+    if (k==nrow(current)){ # Automatically adds last loci of chromosome into c.count
+      group <- group + 1
+      c.count <- c(c.count, c(rep(group, size)))
+      size <- 1
+    }
+    else if (current[k+1,3]-current[k,3]<=1000000) {size <- size + 1} # Increase size of group when gap between suggestive loci is <1 million bp
+    else if (current[k+1,3]-current[k,3]>1000000) { # Stops adding to group size when gap >1 million bp and appends c.count with completed group
+      group <- group + 1
+      c.count <- c(c.count, c(rep(group, size)))
+      size <- 1
+    }
+  }
+}
+
+c.count <- as.data.frame(c.count)
+chrom.group <- cbind(clust, c.count) # combines c.count with clust to be written to file
+write.csv(chrom.group, "grouped_suggestive_E-03.csv", row.names = FALSE)
+```
+
+# 10 Select Maxima from Groups
+This code will take the loci from the previous chunk and find local maxima (most significant) among them
+Default one local max for every 500,000 bp in group
+```{r, Maxima, warning=FALSE}
+setwd(dir) # See chunk #9 Group SNPs
+data <- read.csv("grouped_suggestive_E-03.csv", stringsAsFactors = FALSE)
+count <- c(1:max(data[,6]))
+final <- NULL # Will be populated with all local maxima
+for (i in count) { # Determines local maxima one group at a time
+  current <- data[data[,6]==i,]
+  if (nrow(current)==1) {final <- rbind(final, current)} # Automatically identifies the loci as the one local max if group has only 1 loci
+  else {
+    new <- NULL # Will be populated with local maxima for group
+    curlen <- c(1:nrow(current))
+    med <- median(current[,5]) # Identifies median p-value in the group
+    sec <- ceiling((max(current[,3])-min(current[,3]))/500000) # Identifies total number of local max for group
+    cursort <- current[order(current[,5], decreasing = TRUE),] # Sorts loci so that most significant is at top
+    done <- 1 # This is a counter which will stop the following loop when total local max is reached
+    
+    for (k in curlen) {
+      if (k==1) {new <- rbind(new, cursort[1,])} # First row is always local max
+      else if (done<sec) {
+        gap <- 0
+        for (j in c(1:done)) {
+          tempmin <- min(c(cursort[k,1], new[j,1])) # Identifies lowest bp position of current prospective and previously determined local max
+          tempmax <- max(c(cursort[k,1], new[j,1])) # Identifies highest bp position of current prospective and previously determined local max
+          curtemp <- current[current[,1]>=tempmin & current[,1]<=tempmax,] # Extracts all suggestive loci between two positions
+          if (min(curtemp[,5])<=med) {} # Checks that these loci contain at least one loci with p-value <= median
+          else {gap <- gap + 1} 
+        } # Gap ensures that prospective local max fails if a median p-value does not separate it from EVERY previous local max
+        if (gap==0) { # If prospective local max succeeds, it is added to list and "done" counter is increased
+          new <- rbind(new, cursort[k,])
+          done <- done + 1
+        }
+        else {} 
+      }
+      else if (done>=sec) break # Stops loop when sufficient local max identified
+    }
+    final <- rbind(final, new)
+  }
+}
+write.csv(final, "local_max_500kbp.csv", row.names = FALSE)
+```
+
+# H11 Recode Alleles
+This will create three files:
+A file for 2-allele blocks where the most common allele is denoted with "0" and the alternate is denoted with "1"
+A "primary" file where "0" denotes the most common allele and "1" represents both others.
+A "secondary" file where "0" denotes the second most common allele and "1" represents both others.
+```{r, Recode, warning=FALSE}
+setwd("C:\\Users\\david\\Desktop\\Garland\\Manuscript1\\Sample_Analyses")
+FINAL <- read.csv("File S5.csv", stringsAsFactors = FALSE)
+
+time1 <- Sys.time() # For tracking time to completion for this chunk
+
+Allele2 <- FINAL[which(FINAL$nhap_g61==2),] # Extracts all loci with only two alleles
+Alle.count <- c(1:158)
+Alle.len <- c(1:nrow(Allele2))
+
+for (i in Alle.len) { # Performs this loop for each loci in data set
+  a <- as.numeric(substr(as.character(Allele2[i,8]), 1, 1)) # Identifies first listed allele as 'a'
+  b <- as.numeric(substr(as.character(Allele2[i,8]), 3, 3)) # Identifies second listed allele as 'b'
+  if (sum(Allele2[i,9:ncol(Allele2)]==a, na.rm = TRUE) < sum(Allele2[i,9:ncol(Allele2)]==b, na.rm = TRUE)) {
+    n <- 1 # Uses n as an indicator for which is the most common allele (n=1 for a < b)
+  } 
+  else {n <- 0}
+  
+  for (j in Alle.count) { # Goes through each mouse and replaces most common allele with 0 and least common with 1
+    if (is.na(Allele2[i,j+8])) {}
+    else if (Allele2[i,j+8]==a & n==0) {Allele2[i,j+8] <- 0}
+    else if (Allele2[i,j+8]==a & n==1) {Allele2[i,j+8] <- 1}
+    else if (Allele2[i,j+8]==b & n==0) {Allele2[i,j+8] <- 1}
+    else if (Allele2[i,j+8]==b & n==1) {Allele2[i,j+8] <- 0}
+  }
+}
+
+Allele3 <- FINAL[which(FINAL$nhap_g61==3),] # Extracts all loci with three alleles
+Alle.count <- c(1:158)
+Alle.len <- c(1:nrow(Allele3))
+for (i in Alle.len) {
+  a <- sum(Allele3[i,9:ncol(Allele3)]==1, na.rm = TRUE) # Identifies first listed allele as 'a'
+  b <- sum(Allele3[i,9:ncol(Allele3)]==2, na.rm = TRUE) # Identifies second listed allele as 'b'
+  c <- sum(Allele3[i,9:ncol(Allele3)]==3, na.rm = TRUE) # Identifies third listed allele as 'c'
+  
+  if ((a>=b & a<=c) | (a<=b & a>=c)) { # If 'a' is second most common allele
+    for (j in Alle.count) {
+      if (is.na(Allele3[i,j+8])) {}
+      else if (Allele3[i,j+8]==1 ) {Allele3[i,j+8] <- 1} # Change 'a' allele to 1
+      else if (Allele3[i,j+8]==2 | Allele3[i,j+8]==3) {Allele3[i,j+8] <- 0} # Change other alleles to 0
+    } 
+  }
+  else if ((b>=a & b<=c) | (b<=a & b>=c)) { # If 'b' is second most common allele
+    for (j in Alle.count) {
+      if (is.na(Allele3[i,j+8])) {}
+      else if (Allele3[i,j+8]==2 ) {Allele3[i,j+8] <- 1} # Change 'b' allele to 1
+      else if (Allele3[i,j+8]==1 | Allele3[i,j+8]==3) {Allele3[i,j+8] <- 0} # Change other alleles to 0
+    } 
+  }
+  else if ((c>=a & c<=b) | (c<=a & c>=b)) { # If 'c' is second most common allele
+    for (j in Alle.count) {
+      if (is.na(Allele3[i,j+8])) {}
+      else if (Allele3[i,j+8]==3 ) {Allele3[i,j+8] <- 1} # Change 'c' allele to 1
+      else if (Allele3[i,j+8]==1 | Allele3[i,j+8]==2) {Allele3[i,j+8] <- 0} # Change other alleles to 0
+    } 
+  }
+}
+
+second <- Allele3 # Most common and least common alleles coded as 0, second most common allele coded as 1
+Allele3 <- FINAL[which(FINAL$nhap_g61==3),]
+for (i in Alle.len) {
+  a <- sum(Allele3[i,9:ncol(Allele3)]==1, na.rm = TRUE)
+  b <- sum(Allele3[i,9:ncol(Allele3)]==2, na.rm = TRUE)
+  c <- sum(Allele3[i,9:ncol(Allele3)]==3, na.rm = TRUE)
+  
+  if (c<=a & c<=b) { # If 'c' is least common allele
+    for (j in Alle.count) {
+      if (is.na(Allele3[i,j+8])) {}
+      else if (Allele3[i,j+8]==3 ) {Allele3[i,j+8] <- 1} # Change 'c' allele to 1
+      else if (Allele3[i,j+8]==1 | Allele3[i,j+8]==2) {Allele3[i,j+8] <- 0} # Change other alleles to 0
+    } 
+  }
+  else if (b<=a & b<=c) { # If 'b' is least common allele
+    for (j in Alle.count) {
+      if (is.na(Allele3[i,j+8])) {}
+      else if (Allele3[i,j+8]==2 ) {Allele3[i,j+8] <- 1} # Change 'b' allele to 1
+      else if (Allele3[i,j+8]==1 | Allele3[i,j+8]==3) {Allele3[i,j+8] <- 0} # Change other alleles to 0
+    } 
+  }
+  else if (a<=b & a<=c) { # If 'a' is least common allele
+    for (j in Alle.count) {
+      if (is.na(Allele3[i,j+8])) {}
+      else if (Allele3[i,j+8]==1 ) {Allele3[i,j+8] <- 1} # Change 'a' allele to 1
+      else if (Allele3[i,j+8]==2 | Allele3[i,j+8]==3) {Allele3[i,j+8] <- 0} # Change other alleles to 0
+    } 
+  }
+}
+
+third <- Allele3 # Most common and second most common alleles coded as 0, least common allele coded as 1
+# Add "marker" column for SAS Analyses (important for runtime)
+marker <- as.data.frame(c(1:nrow(Allele2)))
+Allele2 <- cbind(marker, Allele2)
+colnames(Allele2)[1] <- "marker"
+marker <- as.data.frame(c(1:nrow(second)))
+second <- cbind(marker, second)
+colnames(second)[1] <- "marker"
+third <- cbind(marker, third)
+colnames(third)[1] <- "marker"
+write.csv(Allele2, "haplotype_2alleles.csv", row.names = FALSE, na = ".")
+write.csv(second, "haplotype_3alleles_2nd.csv", row.names = FALSE, na = ".")
+write.csv(third, "haplotype_3alleles_3rd.csv", row.names = FALSE, na = ".")
+
+time2 <- Sys.time()
+time2-time1
+# NOTE: Chunk "Create Template Files" must be run before SAS can be run with this data
+```
+
+### NOTE: "Haplotype SAS Code" must be run before proceeding to the next step
+
+# H12 Functions for Combining Haplotype Results
+These are functions that perform much of the same steps as WGS chunks 5-7
+Function: model_select(aic) [Returns: best_model], This will select the model with the lowest AICc
+Function: identify_p(pval, fstat, best_model, aic) [Returns: summ], This combines p-values, f-statistics, best_model, and aic
+Function: hap_freq(allele_data) [Returns: lvar], This takes the data used in SAS analyses and computes allele frequency by line
+Function: no_variance(lvar, summ) [Returns: summ], This removes the model and p-value for those loci with no within-line variance (Failed ANOVA assumptions)
+For line by line details of the code, please see the WGS version in previous chunks
+```{r, HapFunctions, warning=FALSE}
+# model_select()
+model_select <- function(aic) {
+  loci <- c(1:nrow(aic))
+  AIC_min <- c()
+  AIC_name <- c()
+  AIC_ties <- c()
+  for (i in loci) {
+    m <- min(aic[i,])
+    AIC_min <- c(AIC_min, m)
+    if (sum(aic[i,]==m) > 1) {AIC_ties <- c(AIC_ties, i)}
+    if (aic[i,2]==m & !is.na(aic[i,2])) {AIC_name <- c(AIC_name, "nogroup")} 
+    else if (aic[i,4]==m & !is.na(aic[i,4])) {AIC_name <- c(AIC_name, "nogroupMouse")} 
+    else if (aic[i,3]==m & !is.na(aic[i,3])) {AIC_name <- c(AIC_name, "nogroupLine")} 
+    else if (aic[i,1]==m & !is.na(aic[i,1])) {AIC_name <- c(AIC_name, "full")} 
+    else {AIC_name <- c(AIC_name, NA)}
+  }
+  AIC_name <- as.data.frame(AIC_name)
+  AIC_min <- as.data.frame(AIC_min)
+  print(paste("Diagnostics for: ", deparse(substitute(aic)), sep = ""))
+  print(nrow(AIC_min)==nrow(aic)) #Returns TRUE if no rows were omitted from "AIC_min"
+  print(nrow(AIC_min)==nrow(AIC_name)) #Returns TRUE if no rows were omitted from "AIC_name"
+  print(paste("Number of AICc ties = ", length(AIC_ties), sep = "" )) #Returns number of AICc ties
+  best_model <- cbind(AIC_name, AIC_min)
+  
+  return(best_model)
+}
+
+# identify_p()
+identify_p <- function(pval, fstat, best_model, aic) {
+  loci <- c(1:nrow(pval))
+  bestp <- c()
+  bestf <- c()
+  for (i in loci) {
+    if (best_model[i,1]=="nogroup") {
+      bestp <- c(bestp, pval[i,2])
+      bestf <- c(bestf, fstat[i,2])
+    } 
+    else if (best_model[i,1]=="nogroupMouse") {
+      bestp <- c(bestp, pval[i,4])
+      bestf <- c(bestf, fstat[i,4])
+    } 
+    else if (best_model[i,1]=="nogroupLine") {
+      bestp <- c(bestp, pval[i,3])
+      bestf <- c(bestf, fstat[i,3])
+    } 
+    else if (best_model[i,1]=="full") {
+      bestp <- c(bestp, pval[i,1])
+      bestf <- c(bestf, fstat[i,1])
+    } 
+    else {
+      bestp <- c(bestp, NA)
+      bestf <- c(bestf, NA)
+    }
+  }
+  
+  bestp <- as.data.frame(bestp)
+  bestf <- as.data.frame(bestf)
+  count <- as.data.frame(c(1:nrow(aic)))
+  colnames(count) <- c("Loci")
+  summ <- cbind(count, aic, best_model[,1], bestf, bestp, pval, fstat)
+  colnames(summ)[6] <- "Best_model"
+  write.csv(summ, "summ_int.csv", row.names = FALSE)
+  summ <- read.csv("summ_int.csv", stringsAsFactors = FALSE)
+  
+  return(summ)
+}
+
+# hap_freq()
+hap_freq <- function(allele_data) {
+  lvar <- allele_data[,c(1:9)]
+  lvar$AF_C1 <- rowMeans(allele_data[,c(10:29)], na.rm = TRUE)
+  lvar$AF_C2 <- rowMeans(allele_data[,c(30:49)], na.rm = TRUE)
+  lvar$AF_C4 <- rowMeans(allele_data[,c(50:69)], na.rm = TRUE)
+  lvar$AF_C5 <- rowMeans(allele_data[,c(70:89)], na.rm = TRUE)
+  lvar$AF_HR3 <- rowMeans(allele_data[,c(90:107)], na.rm = TRUE)
+  lvar$AF_HR6 <- rowMeans(allele_data[,c(108:127)], na.rm = TRUE)
+  lvar$AF_HR7 <- rowMeans(allele_data[,c(128:147)], na.rm = TRUE)
+  lvar$AF_HR8 <- rowMeans(allele_data[,c(148:167)], na.rm = TRUE)
+  
+  return(lvar)
+}
+
+# no_variance()
+no_variance <- function(lvar, summ) {
+  lvar$fixed <- 0
+  for (i in 1:nrow(lvar)) {lvar[i,18] <- sum(lvar[i,c(10:17)]==0 | lvar[i,c(10:17)]==1)}
+  novar <- which(lvar[,18]==8)
+  for (i in novar) {
+    summ[i,6] <- "No Variance"
+    summ[i,7] <- NA
+    summ[i,8] <- NA
+  }
+  
+  return(summ)
+}
+```
+
+# H13 Read Haplotype Results
+```{r, HapResults, warning=FALSE}
+setwd("C:\\Users\\david\\Desktop\\Garland\\Manuscript1\\Sample_Analyses") # Set dir to match SAS input directory
+allele_data2 <- read.csv("haplotype_2alleles.csv", stringsAsFactors = FALSE, na.strings = ".")
+allele_data32 <- read.csv("haplotype_3alleles_2nd.csv", stringsAsFactors = FALSE, na.strings = ".")
+allele_data33 <- read.csv("haplotype_3alleles_3rd.csv", stringsAsFactors = FALSE, na.strings = ".")
+setwd("C:\\Users\\david\\Desktop\\Garland\\Manuscript1\\Sample_Analyses\\haplotype") # Set dir to match SAS output directory
+
+# Load 2-Allele Results
+pfull <- read.csv("haplotype_2alleles_full_tests.csv", stringsAsFactors = FALSE)
+pnogroup <- read.csv("haplotype_2alleles_nogroup_tests.csv", stringsAsFactors = FALSE)
+pnogroupLine <- read.csv("haplotype_2alleles_nogroupLine_tests.csv", stringsAsFactors = FALSE)
+pnogroupMouse <- read.csv("haplotype_2alleles_nogroupMouse_tests.csv", stringsAsFactors = FALSE)
+
+pval2 <- as.data.frame(cbind(pfull[,5], pnogroup[,5], pnogroupLine[,5], pnogroupMouse[,5]))
+colnames(pval2) <- c("P_full", "P_nogroup", "P_nogroupLine", "P_nogroupMouse")
+fstat2 <- as.data.frame(cbind(pfull[,4], pnogroup[,4], pnogroupLine[,4], pnogroupMouse[,4]))
+colnames(fstat2) <- c("F_full", "F_nogroup", "F_nogroupLine", "F_nogroupMouse")
+
+logfull <- read.csv("haplotype_2alleles_full_log.csv", stringsAsFactors = FALSE)
+lognogroup <- read.csv("haplotype_2alleles_nogroup_log.csv", stringsAsFactors = FALSE)
+lognogroupLine <- read.csv("haplotype_2alleles_nogroupLine_log.csv", stringsAsFactors = FALSE)
+lognogroupMouse <- read.csv("haplotype_2alleles_nogroupMouse_log.csv", stringsAsFactors = FALSE)
+aic2 <- as.data.frame(cbind(logfull[,3], lognogroup[,3], lognogroupLine[,3], lognogroupMouse[,3]))
+colnames(aic2) <- c("AICC_f", "AICC_ng", "AICC_ngL", "AICC_ngM")
+
+# Load 3-Allele (2nd) Results
+pfull <- read.csv("haplotype_3alleles_2nd_full_tests.csv", stringsAsFactors = FALSE)
+pnogroup <- read.csv("haplotype_3alleles_2nd_nogroup_tests.csv", stringsAsFactors = FALSE)
+pnogroupLine <- read.csv("haplotype_3alleles_2nd_nogroupLine_tests.csv", stringsAsFactors = FALSE)
+pnogroupMouse <- read.csv("haplotype_3alleles_2nd_nogroupMouse_tests.csv", stringsAsFactors = FALSE)
+
+pval32 <- as.data.frame(cbind(pfull[,5], pnogroup[,5], pnogroupLine[,5], pnogroupMouse[,5]))
+colnames(pval32) <- c("P_full", "P_nogroup", "P_nogroupLine", "P_nogroupMouse")
+fstat32 <- as.data.frame(cbind(pfull[,4], pnogroup[,4], pnogroupLine[,4], pnogroupMouse[,4]))
+colnames(fstat32) <- c("F_full", "F_nogroup", "F_nogroupLine", "F_nogroupMouse")
+
+logfull <- read.csv("haplotype_3alleles_2nd_full_log.csv", stringsAsFactors = FALSE)
+lognogroup <- read.csv("haplotype_3alleles_2nd_nogroup_log.csv", stringsAsFactors = FALSE)
+lognogroupLine <- read.csv("haplotype_3alleles_2nd_nogroupLine_log.csv", stringsAsFactors = FALSE)
+lognogroupMouse <- read.csv("haplotype_3alleles_2nd_nogroupMouse_log.csv", stringsAsFactors = FALSE)
+aic32 <- as.data.frame(cbind(logfull[,3], lognogroup[,3], lognogroupLine[,3],
+lognogroupMouse[,3])) colnames(aic32) <- c("AICC_f", "AICC_ng", "AICC_ngL", "AICC_ngM")
+
+# Load 3-Allele (3rd) Results
+pfull <- read.csv("haplotype_3alleles_3rd_full_tests.csv", stringsAsFactors = FALSE)
+pnogroup <- read.csv("haplotype_3alleles_3rd_nogroup_tests.csv", stringsAsFactors = FALSE)
+pnogroupLine <- read.csv("haplotype_3alleles_3rd_nogroupLine_tests.csv", stringsAsFactors = FALSE)
+pnogroupMouse <- read.csv("haplotype_3alleles_3rd_nogroupMouse_tests.csv", stringsAsFactors = FALSE)
+
+pval33 <- as.data.frame(cbind(pfull[,5], pnogroup[,5], pnogroupLine[,5], pnogroupMouse[,5]))
+colnames(pval33) <- c("P_full", "P_nogroup", "P_nogroupLine", "P_nogroupMouse")
+fstat33 <- as.data.frame(cbind(pfull[,4], pnogroup[,4], pnogroupLine[,4], pnogroupMouse[,4]))
+colnames(fstat33) <- c("F_full", "F_nogroup", "F_nogroupLine", "F_nogroupMouse")
+
+logfull <- read.csv("haplotype_3alleles_3rd_full_log.csv", stringsAsFactors = FALSE)
+lognogroup <- read.csv("haplotype_3alleles_3rd_nogroup_log.csv", stringsAsFactors = FALSE)
+lognogroupLine <- read.csv("haplotype_3alleles_3rd_nogroupLine_log.csv", stringsAsFactors = FALSE)
+lognogroupMouse <- read.csv("haplotype_3alleles_3rd_nogroupMouse_log.csv", stringsAsFactors = FALSE)
+aic33 <- as.data.frame(cbind(logfull[,3], lognogroup[,3], lognogroupLine[,3], lognogroupMouse[,3]))
+colnames(aic33) <- c("AICC_f", "AICC_ng", "AICC_ngL", "AICC_ngM")
+```
+
+# H14 Run Haplotype Functions
+```{r, runFunctions, warning=FALSE}
+setwd("C:\\Users\\david\\Desktop\\Garland\\Manuscript1\\Sample_Analyses\\haplotype_results") # Set dir to match desired R output directory
+
+# 2-Allele Combination
+bestmodel2 <- model_select(aic2)
+summ2 <- identify_p(pval2, fstat2, bestmodel2, aic2)
+lvar2 <- hap_freq(allele_data2)
+write.csv(lvar2, "Haplotype_2alleles_frequencies_per_line.csv", row.names = FALSE)
+summ_2 <- no_variance(lvar2, summ2)
+summ_2 <- cbind(allele_data2[,c(2:9)], summ_2)
+write.csv(summ_2, "Haplotype_2alleles_Results_Summary.csv", row.names = FALSE)
+short2 <- summ_2[,c(1:9, 14:16)]
+write.csv(short2, "Haplotype_2alleles_Results_Simplified.csv", row.names = FALSE)
+
+# 3-Allele (2nd) Combination
+bestmodel32 <- model_select(aic32)
+summ32 <- identify_p(pval32, fstat32, bestmodel32, aic32)
+lvar32 <- hap_freq(allele_data32)
+write.csv(lvar32, "Haplotype_3alleles_2nd_frequencies_per_line.csv", row.names = FALSE)
+summ_32 <- no_variance(lvar32, summ32)
+summ_32 <- cbind(allele_data32[,c(2:9)], summ_32)
+write.csv(summ_32, "Haplotype_3alleles_2nd_Results_Summary.csv", row.names = FALSE)
+short32 <- summ_32[,c(1:9, 14:16)]
+write.csv(short32, "Haplotype_3alleles_2nd_Results_Simplified.csv", row.names = FALSE)
+
+# 3-Allele (3rd) Combination
+bestmodel33 <- model_select(aic33)
+summ33 <- identify_p(pval33, fstat33, bestmodel33, aic33)
+lvar33 <- hap_freq(allele_data33)
+write.csv(lvar33, "Haplotype_3alleles_3rd_frequencies_per_line.csv", row.names = FALSE)
+summ_33 <- no_variance(lvar33, summ33)
+summ_33 <- cbind(allele_data33[,c(2:9)], summ_33)
+write.csv(summ_33, "Haplotype_3alleles_3rd_Results_Summary.csv", row.names = FALSE)
+short33 <- summ_33[,c(1:9, 14:16)]
+write.csv(short33, "Haplotype_3alleles_3rd_Results_Simplified.csv", row.names = FALSE)
+```
+
+# H15 Combine into One File
+```{r, CombineP, warning=FALSE}
+setwd("C:\\Users\\david\\Desktop\\Garland\\Manuscript1\\Sample_Analyses\\haplotype_results") # Set dir to match haplotype output directory
+
+short2 <- read.csv("Haplotype_2alleles_Results_Simplified.csv", stringsAsFactors = FALSE)
+short32 <- read.csv("Haplotype_3alleles_2nd_Results_Simplified.csv", stringsAsFactors = FALSE)
+short33 <- read.csv("Haplotype_3alleles_3rd_Results_Simplified.csv", stringsAsFactors = FALSE)
+
+# Combine 3-allele p-values with Fisher's method
+mark <- c(1:nrow(short32))
+p.meta <- c()
+logp.meta <- c()
+for (i in mark) {
+chi <- -2 * (log(short32[i,12]) + log(short33[i,12]))
+pvalue <- 1 - pchisq(chi, df=4)
+logp <- -1 * log10(pvalue)
+p.meta <- c(p.meta, pvalue)
+logp.meta <- c(logp.meta, logp)
+}
+p.meta <- as.data.frame(p.meta)
+logp.meta <- as.data.frame(logp.meta)
+result <- cbind(short32[,c(1:9)], p.meta, logp.meta, short32[,12], short33[,12])
+colnames(result) <- c("chr", "Block", "n.hap", "Nblock_g61", "MinPOS", "MaxPOS", "nhap_g61", "haps_g61", "Loci", "Combined_P", "Combined_logP", "2nd_P", "3rd_P")
+write.csv(result, "Haplotype_3alleles_combinedP.csv", row.names = FALSE)
+
+# Combine 2-allele and 3-allele results
+all2 <- short2[,c(1:8, 12)]
+all3 <- result[,c(1:8, 10)]
+colnames(all3)[9] <- "P"
+colnames(all2) <- colnames(all3)
+all_hap <- rbind(all2, all3)
+all_hap <- all_hap[order(all_hap[,1], all_hap[,2]),]
+write.csv(all_hap, "Complete_Haplotype_Results.csv", row.names = FALSE)
+```
+
+
+
+
+
+
+
