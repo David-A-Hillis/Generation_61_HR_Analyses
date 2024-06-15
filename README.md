@@ -1,7 +1,7 @@
 # High-Runner selection experiment genomic comparisons between High-Runner and Control lines generations at 61
 
 This code is based those used in: \
-emsp	Hillis D. A., L. Yadgary, G. M. Weinstock, F. Pardo-Manuel de Villena, D. Pomp, et al., 2020 Genetic 
+&emsp	Hillis D. A., L. Yadgary, G. M. Weinstock, F. Pardo-Manuel de Villena, D. Pomp, et al., 2020 Genetic 
 	basis of aerobically supported voluntary exercise: results from a selection experiment with house mice. 
 	Genetics 216: 781–804. https://doi.org/10.1534/genetics.120.303668
 
@@ -22,7 +22,7 @@ Workflow for WGS SNP analyses [R code] [SAS Code]\
   [R] 7 No Within-Line Variance\
   [R] 8 Write Results\
   [R] 9 Group SNPs\
-  [R] 10 Select Maxima from Groups\
+  [R] 10 Select Maxima from Groups
 
 Haplotype\
   [R] H11 Recode Alleles\
@@ -31,7 +31,7 @@ Haplotype\
   [R] H12 Functions for Combining Haplotype Results\
   [R] H13 Read Haplotype Results\
   [R] H14 Run Haplotype Functions\
-  [R] H15 Combine into One File\
+  [R] H15 Combine into One File
  
 Running the code in its entirety will address only a subset of loci. However, the first R chunk can be 
 skipped and "File_S2_sample.csv" replaced with "File S2.csv" in the second chunk to analyze the whole data
