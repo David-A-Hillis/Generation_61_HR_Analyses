@@ -1,9 +1,9 @@
 # High-Runner selection experiment genomic comparisons between High-Runner and Control lines generations at 61
 
 This code is based those used in: \
-&emsp;	Hillis D. A., L. Yadgary, G. M. Weinstock, F. Pardo-Manuel de Villena, D. Pomp, et al., 2020 Genetic 
-	basis of aerobically supported voluntary exercise: results from a selection experiment with house mice. 
-	Genetics 216: 781–804. https://doi.org/10.1534/genetics.120.303668
+&emsp; &emsp;	Hillis D. A., L. Yadgary, G. M. Weinstock, F. Pardo-Manuel de Villena, D. Pomp, et al., 2020 Genetic 
+&emsp; &emsp;	basis of aerobically supported voluntary exercise: results from a selection experiment with house mice. 
+&emsp; &emsp;	Genetics 216: 781–804. https://doi.org/10.1534/genetics.120.303668
 
 
 Data can be found either in the at figshare: https://doi.org/10.25386/ genetics.12436649
@@ -12,26 +12,26 @@ For the replication of the publication's complete analyses, the Rmarkdown and SA
 interchangeably. The progression is described in the Rmarkdown file:
 
 Workflow for WGS SNP analyses [R code] [SAS Code]\
-&ensp;  [R] 1 Subset Allelic Data for Simple Analyses (only for 100 loci sample)\
-  [R] 2 Prep Allelic Data for Mixed Model Analyses\
-  [R] 3 Create Template Files\
-  [SAS] WGS SAS Code\
-  [R] 4 Merge Results
-  [R] 5 AIC Model Selection\
-  [R] 6 Identify P-Value\
-  [R] 7 No Within-Line Variance\
-  [R] 8 Write Results\
-  [R] 9 Group SNPs\
-  [R] 10 Select Maxima from Groups
+&emsp;  [R] 1 Subset Allelic Data for Simple Analyses (only for 100 loci sample)\
+&emsp;  [R] 2 Prep Allelic Data for Mixed Model Analyses\
+&emsp;  [R] 3 Create Template Files\
+&emsp;  [SAS] WGS SAS Code\
+&emsp;  [R] 4 Merge Results
+&emsp;  [R] 5 AIC Model Selection\
+&emsp;  [R] 6 Identify P-Value\
+&emsp;  [R] 7 No Within-Line Variance\
+&emsp;  [R] 8 Write Results\
+&emsp;  [R] 9 Group SNPs\
+&emsp;  [R] 10 Select Maxima from Groups
 
 Haplotype\
-  [R] H11 Recode Alleles\
-  [R] 3 Create Template Files (Not necessary if files still remain from SNP analyses)\
-  [SAS] Haplotype SAS Code\
-  [R] H12 Functions for Combining Haplotype Results\
-  [R] H13 Read Haplotype Results\
-  [R] H14 Run Haplotype Functions\
-  [R] H15 Combine into One File
+&emsp;  [R] H11 Recode Alleles\
+&emsp;  [R] 3 Create Template Files (Not necessary if files still remain from SNP analyses)\
+&emsp;  [SAS] Haplotype SAS Code\
+&emsp;  [R] H12 Functions for Combining Haplotype Results\
+&emsp;  [R] H13 Read Haplotype Results\
+&emsp;  [R] H14 Run Haplotype Functions\
+&emsp;  [R] H15 Combine into One File
  
 Running the code in its entirety will address only a subset of loci. However, the first R chunk can be 
 skipped and "File_S2_sample.csv" replaced with "File S2.csv" in the second chunk to analyze the whole data
