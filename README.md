@@ -6,7 +6,7 @@ This code is based those used in: \
 &emsp; &emsp;	Genetics 216: 781–804. https://doi.org/10.1534/genetics.120.303668
 
 
-Data can be found either in the at figshare: https://doi.org/10.25386/ genetics.12436649
+Data can be found at figshare: https://doi.org/10.25386/ genetics.12436649
 
 For the replication of the publication's complete analyses, the Rmarkdown and SAS code need to be run 
 interchangeably. The progression is described in the Rmarkdown file:
@@ -16,7 +16,7 @@ Workflow for WGS SNP analyses [R code] [SAS Code]\
 &emsp;  [R] 2 Prep Allelic Data for Mixed Model Analyses\
 &emsp;  [R] 3 Create Template Files\
 &emsp;  [SAS] WGS SAS Code\
-&emsp;  [R] 4 Merge Results
+&emsp;  [R] 4 Merge Results\
 &emsp;  [R] 5 AIC Model Selection\
 &emsp;  [R] 6 Identify P-Value\
 &emsp;  [R] 7 No Within-Line Variance\
