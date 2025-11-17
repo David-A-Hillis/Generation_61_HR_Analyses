@@ -6,7 +6,7 @@ This code is based those used in: \
 &emsp; &emsp;	Genetics 216: 781–804. https://doi.org/10.1534/genetics.120.303668
 
 
-Data can be found at figshare: https://doi.org/10.25386/ genetics.12436649
+Data can be found at figshare: https://doi.org/10.25386/genetics.12436649
 
 For the replication of the publication's complete analyses, the Rmarkdown and SAS code need to be run 
 interchangeably. The progression is described in the Rmarkdown file:
